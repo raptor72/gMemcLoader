@@ -15,9 +15,19 @@ import (
 )
 
 
-// func cacher(s string) {
+func cacher(s []string, mc *memcache.Client) {
+	for _, st := range s {
+		words := strings.Fields(st)
+		if len(words) > 1 {
+			key := words[0] + ":" + words[1]
+			value := strings.Join( words[2:], ",")
+			fmt.Println(key)
+			fmt.Println(value)
+			mc.Set(&memcache.Item{Key: key, Value: []byte(value)})
+		}
+	}
 
-// }
+}
 
 
 // func bufer_handler(head_string []byte, chank []byte) []byte {
@@ -31,7 +41,7 @@ import (
 
 func main() {
 	mc := memcache.New("127.0.0.1:11211")
-    fmt.Println(mc)
+    fmt.Printf("%T\n", mc)
 
     nBytes, nChunks := int64(0), int64(0)
     file, err := os.Open("20170929000300.tsv.gz")
@@ -56,19 +66,9 @@ func main() {
 
         // fmt.Println(string(buf))
         smass := strings.Split(string(buf), "\n")
-        // fmt.Println(smass)
-        for _, st := range smass {
-            // fmt.Println(st)
-            words := strings.Fields(st)
 
-			if len(words) > 1 {
-    			key := words[0] + ":" + words[1]
-                value := strings.Join( words[2:], ",")
-                fmt.Println(key)
-                fmt.Println(value)
-				mc.Set(&memcache.Item{Key: key, Value: []byte(value)})
-			}
-		}
+		cacher(smass, mc)
+
 		strings_in_batch := len(smass)
         last_string := smass[strings_in_batch - 1]
         fmt.Println(last_string)

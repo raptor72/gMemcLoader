@@ -2,6 +2,7 @@ package main
 
 import (
 	// "bytes"
+    "flag"
 	"fmt"
 	"io"
 	"log"
@@ -33,10 +34,11 @@ func cacher(buf []byte, mc *memcache.Client) {
 func bufer_handler(head []byte, chank []byte, mc *memcache.Client) []byte {
 	smass := strings.Split(string(chank), "\n")
 	strings_in_batch := len(smass)
-	// last_string := smass[strings_in_batch - 1]
     starter := 0
 	if len(head) != 0 {
-        head = append(head, []byte(smass[0])...)
+        // fmt.Println("head!!!")
+		// fmt.Println(string(head))
+		head = append(head, []byte(smass[0])...)
         cacher(head, mc)
         starter += 1
 	}
@@ -49,8 +51,12 @@ func bufer_handler(head []byte, chank []byte, mc *memcache.Client) []byte {
 
 
 func main() {
+    flushAll := flag.Bool("flushAll", true, "Drop all cached values before the programm start")
+	flag.Parse()
 	mc := memcache.New("127.0.0.1:11211")
-    fmt.Printf("%T\n", mc)
+	if *flushAll {
+        mc.FlushAll()
+	}
 
     nBytes, nChunks := int64(0), int64(0)
     file, err := os.Open("20170929000300.tsv.gz")
@@ -71,22 +77,8 @@ func main() {
 
 	for {
         n, err := zipReader.Read(buf[:cap(buf)])
-        // n = n + corrected_bytes_len
 
         buf = buf[:n]
-
-        // fmt.Println(string(buf))
-
-        head = bufer_handler(head, buf, mc)
-
-		// smass := strings.Split(string(buf), "\n")
-		// cacher(buf, mc)
-		// strings_in_batch := len(smass)
-        // last_string := smass[strings_in_batch - 1]
-		// fmt.Printf("%T\n", last_string)
-		// fmt.Println(last_string)
-        // fmt.Println(len([]byte(last_string)))
-        fmt.Println("#########################################")
 
         if n == 0 {
             if err == nil {
@@ -100,8 +92,11 @@ func main() {
         nChunks++
         nBytes += int64(len(buf))
 
-        // buf = buf[:n]
-        // process buf
+		// process buf
+        head = bufer_handler(head, buf, mc)
+
+        fmt.Println("#########################################")
+
         if err != nil && err != io.EOF {
             log.Fatal(err)
         }

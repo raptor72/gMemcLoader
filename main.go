@@ -1,16 +1,32 @@
 package main
 
 import (
-    "io"
-    "os"
+	// "bytes"
 	"fmt"
-    "log"
-    // "io/ioutil"
-    "strings"
-    "compress/gzip"
-	"github.com/bradfitz/gomemcache/memcache"	
+	"io"
+	"log"
+	"os"
+
+	// "io/ioutil"
+	"compress/gzip"
+	"strings"
+
+	"github.com/bradfitz/gomemcache/memcache"
 )
 
+
+// func cacher(s string) {
+
+// }
+
+
+// func bufer_handler(head_string []byte, chank []byte) []byte {
+// 	smass := strings.Split(string(chank), "\n")
+// 	strings_in_batch := len(smass)
+// 	last_string := smass[strings_in_batch - 1]
+// 	if len(head_string) != 0 {
+// 	}
+// }
 
 
 func main() {
@@ -23,8 +39,6 @@ func main() {
         fmt.Println(err)
     }
     defer file.Close()
-    ff := "ап"
-    fmt.Println(len([]byte(ff)))
 
 	zipReader, err := gzip.NewReader(file)
 	if err != nil {
@@ -32,9 +46,7 @@ func main() {
 	}
     defer zipReader.Close()
 
-    buf := make([]byte, 0, 4*1024)
-
-    // corrected_bytes_len := 0
+	buf := make([]byte, 0, 4*1024)
 
     for {
         n, err := zipReader.Read(buf[:cap(buf)])
@@ -44,16 +56,25 @@ func main() {
 
         // fmt.Println(string(buf))
         smass := strings.Split(string(buf), "\n")
-        fmt.Println(smass)
-        strings_in_batch := len(smass)
+        // fmt.Println(smass)
+        for _, st := range smass {
+            // fmt.Println(st)
+            words := strings.Fields(st)
+
+			if len(words) > 1 {
+    			key := words[0] + ":" + words[1]
+                value := strings.Join( words[2:], ",")
+                fmt.Println(key)
+                fmt.Println(value)
+				mc.Set(&memcache.Item{Key: key, Value: []byte(value)})
+			}
+		}
+		strings_in_batch := len(smass)
         last_string := smass[strings_in_batch - 1]
         fmt.Println(last_string)
         fmt.Println(len([]byte(last_string)))
         fmt.Println("#########################################")
-        // corrected_bytes_len = len([]byte(last_string))
-//        }
-//        fmt.Printf("%T", buf)
-//        s, err := reader.ReadString('\n')
+
         if n == 0 {
             if err == nil {
                 continue
@@ -73,14 +94,5 @@ func main() {
         }
     }
     log.Println("Bytes:", nBytes, "Chunks:", nChunks)
-
-
-    
-	// s, err := ioutil.ReadAll(zipReader)
-    // if err != nil {
-    //     fmt.Println(err)
-    // }
-    // fmt.Println(string(s))   
-
 
 }

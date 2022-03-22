@@ -15,7 +15,8 @@ import (
 )
 
 
-func cacher(s []string, mc *memcache.Client) {
+func cacher(buf []byte, mc *memcache.Client) {
+	s := strings.Split(string(buf), "\n")
 	for _, st := range s {
 		words := strings.Fields(st)
 		if len(words) > 1 {
@@ -26,17 +27,25 @@ func cacher(s []string, mc *memcache.Client) {
 			mc.Set(&memcache.Item{Key: key, Value: []byte(value)})
 		}
 	}
-
 }
 
 
-// func bufer_handler(head_string []byte, chank []byte) []byte {
-// 	smass := strings.Split(string(chank), "\n")
-// 	strings_in_batch := len(smass)
-// 	last_string := smass[strings_in_batch - 1]
-// 	if len(head_string) != 0 {
-// 	}
-// }
+func bufer_handler(head []byte, chank []byte, mc *memcache.Client) []byte {
+	smass := strings.Split(string(chank), "\n")
+	strings_in_batch := len(smass)
+	// last_string := smass[strings_in_batch - 1]
+    starter := 0
+	if len(head) != 0 {
+        head = append(head, []byte(smass[0])...)
+        cacher(head, mc)
+        starter += 1
+	}
+    for starter < strings_in_batch - 1 {
+        cacher( []byte(smass[starter]), mc)
+        starter ++
+	}
+	return []byte(smass[strings_in_batch - 1])
+}
 
 
 func main() {
@@ -58,21 +67,25 @@ func main() {
 
 	buf := make([]byte, 0, 4*1024)
 
-    for {
+	head := []byte{}
+
+	for {
         n, err := zipReader.Read(buf[:cap(buf)])
         // n = n + corrected_bytes_len
 
         buf = buf[:n]
 
         // fmt.Println(string(buf))
-        smass := strings.Split(string(buf), "\n")
 
-		cacher(smass, mc)
+        head = bufer_handler(head, buf, mc)
 
-		strings_in_batch := len(smass)
-        last_string := smass[strings_in_batch - 1]
-        fmt.Println(last_string)
-        fmt.Println(len([]byte(last_string)))
+		// smass := strings.Split(string(buf), "\n")
+		// cacher(buf, mc)
+		// strings_in_batch := len(smass)
+        // last_string := smass[strings_in_batch - 1]
+		// fmt.Printf("%T\n", last_string)
+		// fmt.Println(last_string)
+        // fmt.Println(len([]byte(last_string)))
         fmt.Println("#########################################")
 
         if n == 0 {

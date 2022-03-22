@@ -8,7 +8,7 @@ import (
 	"log"
 	"os"
 
-	// "io/ioutil"
+	"io/ioutil"
 	"compress/gzip"
 	"strings"
 
@@ -58,6 +58,16 @@ func main() {
         mc.FlushAll()
 	}
 
+	filesFromDir, err := ioutil.ReadDir(".")
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, file := range filesFromDir {
+        if !strings.HasPrefix(file.Name(), ".") && strings.HasSuffix(file.Name(), ".tsv.gz") {
+    		// Проходим по всем найденным файлам и печатаем их имя и размер
+	    	fmt.Printf("name: %s, typename: %T, size: %d\n", file.Name(), file.Name(), file.Size())
+		}
+	}
     nBytes, nChunks := int64(0), int64(0)
     file, err := os.Open("20170929000300.tsv.gz")
     if err != nil {

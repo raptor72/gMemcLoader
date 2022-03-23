@@ -23,15 +23,15 @@ func cacher(buf []byte, mc *memcache.Client) {
 		if len(words) > 1 {
 			key := words[0] + ":" + words[1]
 			value := strings.Join( words[2:], ",")
-			fmt.Println(key)
-			fmt.Println(value)
+			// fmt.Println(key)
+			// fmt.Println(value)
 			mc.Set(&memcache.Item{Key: key, Value: []byte(value)})
 		}
 	}
 }
 
 
-func bufer_handler(head []byte, chank []byte, mc *memcache.Client) []byte {
+func buferHandler(head []byte, chank []byte, mc *memcache.Client) []byte {
 	smass := strings.Split(string(chank), "\n")
 	strings_in_batch := len(smass)
     starter := 0
@@ -50,26 +50,9 @@ func bufer_handler(head []byte, chank []byte, mc *memcache.Client) []byte {
 }
 
 
-func main() {
-    flushAll := flag.Bool("flushAll", true, "Drop all cached values before the programm start")
-	flag.Parse()
-	mc := memcache.New("127.0.0.1:11211")
-	if *flushAll {
-        mc.FlushAll()
-	}
-
-	filesFromDir, err := ioutil.ReadDir(".")
-	if err != nil {
-		log.Fatal(err)
-	}
-	for _, file := range filesFromDir {
-        if !strings.HasPrefix(file.Name(), ".") && strings.HasSuffix(file.Name(), ".tsv.gz") {
-    		// Проходим по всем найденным файлам и печатаем их имя и размер
-	    	fmt.Printf("name: %s, typename: %T, size: %d\n", file.Name(), file.Name(), file.Size())
-		}
-	}
+func fileProcessor(fileName string, memcacheClient *memcache.Client) {
     nBytes, nChunks := int64(0), int64(0)
-    file, err := os.Open("20170929000300.tsv.gz")
+    file, err := os.Open(fileName)
     if err != nil {
         fmt.Println(err)
     }
@@ -102,15 +85,34 @@ func main() {
         nChunks++
         nBytes += int64(len(buf))
 
-		// process buf
-        head = bufer_handler(head, buf, mc)
-
-        fmt.Println("#########################################")
-
+        head = buferHandler(head, buf, memcacheClient)
+        // fmt.Println("#########################################")
         if err != nil && err != io.EOF {
             log.Fatal(err)
         }
     }
-    log.Println("Bytes:", nBytes, "Chunks:", nChunks)
+    log.Println("Prosessed:", fileName, "Bytes:", nBytes, "Chunks:", nChunks)
+}
 
+
+func main() {
+    flushAll := flag.Bool("flushAll", true, "Drop all cached values before the program start")
+	flag.Parse()
+	mc := memcache.New("127.0.0.1:11211")
+	if *flushAll {
+        mc.FlushAll()
+	}
+
+	filesFromDir, err := ioutil.ReadDir(".")
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, file := range filesFromDir {
+        // if !strings.HasPrefix(file.Name(), ".") && strings.HasSuffix(file.Name(), ".tsv.gz") && file.Name() == "20170929000300.tsv.gz" {
+		if !strings.HasPrefix(file.Name(), ".") && strings.HasSuffix(file.Name(), ".tsv.gz") {
+			// Проходим по всем найденным файлам и печатаем их имя и размер
+			fileProcessor(file.Name(), mc)
+			fmt.Printf("name: %s, size: %d\n", file.Name(), file.Size())
+		}
+	}
 }

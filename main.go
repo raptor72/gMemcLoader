@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"compress/gzip"
 	"strings"
+    "sync"
 
 	"github.com/bradfitz/gomemcache/memcache"
 )
@@ -50,8 +51,9 @@ func buferHandler(head []byte, chank []byte, mc *memcache.Client) []byte {
 }
 
 
-func fileProcessor(fileName string, memcacheClient *memcache.Client) {
-    nBytes, nChunks := int64(0), int64(0)
+func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.WaitGroup) {
+    defer w.Done()
+	nBytes, nChunks := int64(0), int64(0)
     file, err := os.Open(fileName)
     if err != nil {
         fmt.Println(err)
@@ -64,7 +66,7 @@ func fileProcessor(fileName string, memcacheClient *memcache.Client) {
 	}
     defer zipReader.Close()
 
-	buf := make([]byte, 0, 4*1024)
+	buf := make([]byte, 0, 4*1024*1024)
 
 	head := []byte{}
 
@@ -107,12 +109,15 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+    wg := new(sync.WaitGroup)
 	for _, file := range filesFromDir {
         // if !strings.HasPrefix(file.Name(), ".") && strings.HasSuffix(file.Name(), ".tsv.gz") && file.Name() == "20170929000300.tsv.gz" {
 		if !strings.HasPrefix(file.Name(), ".") && strings.HasSuffix(file.Name(), ".tsv.gz") {
 			// Проходим по всем найденным файлам и печатаем их имя и размер
-			fileProcessor(file.Name(), mc)
+            wg.Add(1)
+			go fileProcessor(file.Name(), mc, wg)
 			fmt.Printf("name: %s, size: %d\n", file.Name(), file.Size())
 		}
 	}
+    wg.Wait()
 }

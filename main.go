@@ -37,14 +37,12 @@ func buferHandler(head []byte, chank []byte, mc *memcache.Client) []byte {
 	strings_in_batch := len(smass)
     starter := 0
 	if len(head) != 0 {
-        // fmt.Println("head!!!")
-		// fmt.Println(string(head))
 		head = append(head, []byte(smass[0])...)
-        cacher(head, mc)
+        go cacher(head, mc)
         starter += 1
 	}
     for starter < strings_in_batch - 1 {
-        cacher( []byte(smass[starter]), mc)
+        go cacher( []byte(smass[starter]), mc)
         starter ++
 	}
 	return []byte(smass[strings_in_batch - 1])
@@ -66,7 +64,7 @@ func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.Wai
 	}
     defer zipReader.Close()
 
-	buf := make([]byte, 0, 4*1024*1024)
+	buf := make([]byte, 0, 8*1024*1024)
 
 	head := []byte{}
 
@@ -88,12 +86,12 @@ func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.Wai
         nBytes += int64(len(buf))
 
         head = buferHandler(head, buf, memcacheClient)
-        // fmt.Println("#########################################")
-        if err != nil && err != io.EOF {
+
+		if err != nil && err != io.EOF {
             log.Fatal(err)
         }
     }
-    log.Println("Prosessed:", fileName, "Bytes:", nBytes, "Chunks:", nChunks)
+    log.Println("Prosessed file:", fileName, "Bytes:", nBytes, "Chunks:", nChunks)
 }
 
 
@@ -113,10 +111,9 @@ func main() {
 	for _, file := range filesFromDir {
         // if !strings.HasPrefix(file.Name(), ".") && strings.HasSuffix(file.Name(), ".tsv.gz") && file.Name() == "20170929000300.tsv.gz" {
 		if !strings.HasPrefix(file.Name(), ".") && strings.HasSuffix(file.Name(), ".tsv.gz") {
-			// Проходим по всем найденным файлам и печатаем их имя и размер
             wg.Add(1)
 			go fileProcessor(file.Name(), mc, wg)
-			fmt.Printf("name: %s, size: %d\n", file.Name(), file.Size())
+			log.Printf("name: %s, size: %d\n", file.Name(), file.Size())
 		}
 	}
     wg.Wait()

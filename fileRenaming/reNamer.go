@@ -14,15 +14,18 @@ import (
 
 
 
-func someLatency(idx int, w *sync.WaitGroup, ch chan(int), done chan(struct{})) { 
+func someLatency(idx, length int, w *sync.WaitGroup, ch chan(int), done chan(int)) { 
     defer w.Done()
 	latency := rand.Intn(2000) + 300
 	time.Sleep(time.Duration(latency) * time.Millisecond)
 	fmt.Println("Done id: ", idx)
     ch <- idx
     // Здесь по идее надо каунтером высчитывать последний элемент
-	if idx == 8 {
-		close(done)
+	// if idx == 8 {
+	// 	close(done)
+	// }
+    if <-done == length {
+        close(done)
 	}
 }
 
@@ -63,34 +66,49 @@ func main() {
 	// }
 
 	targetFiles2 := []int{11,21,13,41,51,16,17,18,29}
+    length := len(targetFiles2)
+
+    fmt.Println(length)
 
 	readyChan := make(chan int, len(targetFiles2))
-    done := make(chan(struct{}))
+    done := make(chan(int))
 	// min := 0
     // buff := []int{}
 
 
 	for idx, _ := range targetFiles2 {
 		wg.Add(1)
-		go someLatency(idx, wg, readyChan, done)
+		go someLatency(idx, length, wg, readyChan, done)
 	}
 
 
 	wg2 := new(sync.WaitGroup)
 
+    mu := new(sync.Mutex)
+
+	counter := 0
 	wg2.Add(1)
-    go func(w2 *sync.WaitGroup) {
+    go func(w2 *sync.WaitGroup, ctr int, mu *sync.Mutex) {
         defer w2.Done()
 		for {
 			select {
 			case msg := <-readyChan:
                 fmt.Println(msg, true)
-			case <-done:
-                fmt.Println("loop broke")
-				return
+                mu.Lock()
+				ctr++
+                mu.Unlock()
+                fmt.Println("counter:", ctr)
+                if ctr == length {
+					done <- ctr
+                    return
+				}
+
+			// case <-done:
+            //     fmt.Println("loop broke")
+			// 	return
 			}
 		}
-	}(wg2)
+	}(wg2, counter, mu)
 	wg.Wait()
 	wg2.Wait()
 }

@@ -14,20 +14,29 @@ import (
 
 
 
-func someLatency(idx int, w *sync.WaitGroup, ch chan(int)) { 
+func someLatency(idx int, w *sync.WaitGroup, ch chan(int), done chan(struct{})) { 
     defer w.Done()
-	latency := rand.Intn(1500) + 500
+	latency := rand.Intn(2000) + 300
 	time.Sleep(time.Duration(latency) * time.Millisecond)
-	// fmt.Println(idx)
+	fmt.Println("Done id: ", idx)
     ch <- idx
-    // if idx == 3 {
-	// 	close(ch)
-	// }
+    // Здесь по идее надо каунтером высчитывать последний элемент
+	if idx == 8 {
+		close(done)
+	}
 }
 
 
 func remove(slice []int, s int) []int {
-    return append(slice[:s], slice[s+1:]...)
+    newSlise := []int{}
+    for _, value := range slice {
+		if value == s {
+			continue
+		} else {
+			newSlise = append(newSlise, value)
+		}
+	}
+    return newSlise
 }
 
 
@@ -53,34 +62,35 @@ func main() {
 	// 	fmt.Println(file.Name())
 	// }
 
+	targetFiles2 := []int{11,21,13,41,51,16,17,18,29}
 
-	readyChan := make(chan int, len(targetFiles))
-	min := 0
-    buff := []int{}
+	readyChan := make(chan int, len(targetFiles2))
+    done := make(chan(struct{}))
+	// min := 0
+    // buff := []int{}
 
-	for idx, _ := range targetFiles {
+
+	for idx, _ := range targetFiles2 {
 		wg.Add(1)
-		go someLatency(idx, wg, readyChan) 
+		go someLatency(idx, wg, readyChan, done)
 	}
-	wg.Wait()
-	close(readyChan)
 
-	// Возможно запустить цикл в горутине
-	for value := range readyChan {
-		// fmt.Println(value)
-        if value == min {
-            fmt.Println("min from channel")
-			fmt.Println(min)
-            min +=1
-		} else {
-			buff = append(buff, value)  
-            // fmt.Println("min from saved buffer")
+
+	wg2 := new(sync.WaitGroup)
+
+	wg2.Add(1)
+    go func(w2 *sync.WaitGroup) {
+        defer w2.Done()
+		for {
+			select {
+			case msg := <-readyChan:
+                fmt.Println(msg, true)
+			case <-done:
+                fmt.Println("loop broke")
+				return
+			}
 		}
-	}
-
-	fmt.Println("from buffer: ")
-	for _, buff_value := range buff {
-        fmt.Println(buff_value)
-	}
-
+	}(wg2)
+	wg.Wait()
+	wg2.Wait()
 }

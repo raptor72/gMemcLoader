@@ -72,8 +72,8 @@ func main() {
 
 	readyChan := make(chan int, len(targetFiles2))
     done := make(chan(int))
-	// min := 0
-    // buff := []int{}
+	min := 0
+    buff := []int{}
 
 
 	for idx, _ := range targetFiles2 {
@@ -93,8 +93,28 @@ func main() {
 		for {
 			select {
 			case msg := <-readyChan:
-                fmt.Println(msg, true)
-                mu.Lock()
+                if msg == min {
+					fmt.Println(msg, true)		
+                    mu.Lock()
+                    min++
+                    mu.Unlock()
+				} else {
+                    mu.Lock()
+					buff = append(buff, msg)
+                    mu.Unlock()
+				}
+				for _, value := range buff {
+					if value == min {
+                        fmt.Println("Remove from buffer while goroutine wirging", value)
+						mu.Lock()
+						min++
+					    buff = remove(buff, value)
+                        mu.Unlock()
+					}
+				}
+                
+				
+				mu.Lock()
 				ctr++
                 mu.Unlock()
                 fmt.Println("counter:", ctr)
@@ -102,13 +122,12 @@ func main() {
 					done <- ctr
                     return
 				}
-
-			// case <-done:
-            //     fmt.Println("loop broke")
-			// 	return
 			}
 		}
 	}(wg2, counter, mu)
 	wg.Wait()
 	wg2.Wait()
+    for _, value := range buff {
+        fmt.Println("buffer after goroutine done", value)
+	}
 }

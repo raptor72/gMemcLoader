@@ -75,15 +75,12 @@ func main() {
 	min := 0
     buff := []int{}
 
-
 	for idx, _ := range targetFiles2 {
 		wg.Add(1)
 		go someLatency(idx, length, wg, readyChan, done)
 	}
 
-
 	wg2 := new(sync.WaitGroup)
-
     mu := new(sync.Mutex)
 
 	counter := 0
@@ -105,15 +102,13 @@ func main() {
 				}
 				for _, value := range buff {
 					if value == min {
-                        fmt.Println("Remove from buffer while goroutine wirging", value)
+                        fmt.Println("Remove from buffer while goroutine working", value)
 						mu.Lock()
 						min++
 					    buff = remove(buff, value)
                         mu.Unlock()
 					}
 				}
-                
-				
 				mu.Lock()
 				ctr++
                 mu.Unlock()

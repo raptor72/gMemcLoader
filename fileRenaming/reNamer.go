@@ -12,23 +12,17 @@ import (
     "math/rand"
 )
 
-
-
 func someLatency(idx, length int, w *sync.WaitGroup, ch chan(int), done chan(int)) { 
-    defer w.Done()
+    // функция иммитирующая загрузку файлов в мемкеш. Добавляет произвольную задержку на каждое выполнение
+	defer w.Done()
 	latency := rand.Intn(2000) + 300
 	time.Sleep(time.Duration(latency) * time.Millisecond)
 	fmt.Println("Done id: ", idx)
     ch <- idx
-    // Здесь по идее надо каунтером высчитывать последний элемент
-	// if idx == 8 {
-	// 	close(done)
-	// }
     if <-done == length {
         close(done)
 	}
 }
-
 
 func remove(slice []int, s int) []int {
     newSlise := []int{}
@@ -41,7 +35,6 @@ func remove(slice []int, s int) []int {
 	}
     return newSlise
 }
-
 
 func main() {
 	filesFromDir, err := ioutil.ReadDir("../")
@@ -68,60 +61,61 @@ func main() {
 	targetFiles2 := []int{11,21,13,41,51,16,17,18,29}
     length := len(targetFiles2)
 
-    fmt.Println(length)
+    // fmt.Println("length: ", length)
 
-	readyChan := make(chan int, len(targetFiles2))
-    done := make(chan(int))
-	min := 0
-    buff := []int{}
+	readyChan := make(chan int, len(targetFiles2)) // канал для обмена значениями между горитнами воркерами и горутиной буффером
+    done := make(chan(int)) // канал для завершения работы горутины - буффера
+	var min int  // указатель на текущее минимальное значение
+	var counter int // количество отработанных горитин из числа length
+	buff := []int{} // буфер куда складываются отработавшие значения превышающие минимальное
 
-	for idx, _ := range targetFiles2 {
+	for idx := range targetFiles2 {
 		wg.Add(1)
 		go someLatency(idx, length, wg, readyChan, done)
 	}
 
-	wg2 := new(sync.WaitGroup)
+	buffer_group := new(sync.WaitGroup)
     mu := new(sync.Mutex)
 
-	counter := 0
-	wg2.Add(1)
+	buffer_group.Add(1)
     go func(w2 *sync.WaitGroup, ctr int, mu *sync.Mutex) {
-        defer w2.Done()
-		for {
-			select {
-			case msg := <-readyChan:
-                if msg == min {
-					fmt.Println(msg, true)		
-                    mu.Lock()
-                    min++
-                    mu.Unlock()
-				} else {
-                    mu.Lock()
-					buff = append(buff, msg)
-                    mu.Unlock()
-				}
-				for _, value := range buff {
-					if value == min {
-                        fmt.Println("Remove from buffer while goroutine working", value)
-						mu.Lock()
-						min++
-					    buff = remove(buff, value)
-                        mu.Unlock()
-					}
-				}
-				mu.Lock()
-				ctr++
+        // функция конкурентный буффер. Если из канала получается минимальное значение оно сразу обрабатывается
+		// в данном случае печатается. Иначе значение добавляется в буфер
+        // затем буфер проверяется на наличие в нем текущего минимального значения и в случае его присутствия оно 
+        // так же будет обработано
+		defer w2.Done()
+		for msg := range readyChan {
+            if msg == min {
+				fmt.Println("Current min value done", msg)		
+                mu.Lock()
+                min++
                 mu.Unlock()
-                fmt.Println("counter:", ctr)
-                if ctr == length {
-					done <- ctr
-                    return
+			} else {
+                mu.Lock()
+				buff = append(buff, msg)
+                mu.Unlock()
+			}
+			for _, value := range buff {
+				if value == min {
+                    fmt.Println("Remove from buffer while goroutine working", value)
+					mu.Lock()
+					min++
+					buff = remove(buff, value)
+                    mu.Unlock()
 				}
 			}
+			mu.Lock()
+			ctr++
+            mu.Unlock()
+            fmt.Println("counter:", ctr)
+            if ctr == length {
+				done <- ctr
+                return
+			}
 		}
-	}(wg2, counter, mu)
+	}(buffer_group, counter, mu)
 	wg.Wait()
-	wg2.Wait()
+	buffer_group.Wait()
     for _, value := range buff {
         fmt.Println("buffer after goroutine done", value)
 	}

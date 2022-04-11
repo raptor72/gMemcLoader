@@ -7,7 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
-
+    "sort"
 	"io/ioutil"
 	"compress/gzip"
 	"strings"
@@ -16,6 +16,17 @@ import (
 	"github.com/bradfitz/gomemcache/memcache"
 )
 
+func remove(slice []int, s int) []int {
+    newSlise := []int{}
+    for _, value := range slice {
+		if value == s {
+			continue
+		} else {
+			newSlise = append(newSlise, value)
+		}
+	}
+    return newSlise
+}
 
 func cacher(buf []byte, mc *memcache.Client) {
 	s := strings.Split(string(buf), "\n")
@@ -48,9 +59,19 @@ func buferHandler(head []byte, chank []byte, mc *memcache.Client) []byte {
 	return []byte(smass[strings_in_batch - 1])
 }
 
+func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.WaitGroup, ch chan(int), done chan(int), idx, length int) {
+// func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.WaitGroup, ch chan(int), idx, length int) {
+	defer w.Done()
 
-func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.WaitGroup) {
-    defer w.Done()
+	// if <-done == length {
+    //     close(done)
+	// }
+
+	// if _, ok := <-done; ok {
+    //     close(done)
+	// }
+
+
 	nBytes, nChunks := int64(0), int64(0)
     file, err := os.Open(fileName)
     if err != nil {
@@ -91,7 +112,14 @@ func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.Wai
             log.Fatal(err)
         }
     }
-    log.Println("Prosessed file:", fileName, "Bytes:", nBytes, "Chunks:", nChunks)
+	ch <- idx
+	log.Println("Prosessed file:", fileName, "Bytes:", nBytes, "Chunks:", nChunks)
+	// if <-done == length {
+    //     close(done)
+	// }
+	// if _, ok := <-done; ok {
+    //     close(done)
+	// }
 }
 
 
@@ -107,14 +135,87 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-    wg := new(sync.WaitGroup)
+
+
+    var targetFiles []os.FileInfo
 	for _, file := range filesFromDir {
-        // if !strings.HasPrefix(file.Name(), ".") && strings.HasSuffix(file.Name(), ".tsv.gz") && file.Name() == "20170929000300.tsv.gz" {
 		if !strings.HasPrefix(file.Name(), ".") && strings.HasSuffix(file.Name(), ".tsv.gz") {
-            wg.Add(1)
-			go fileProcessor(file.Name(), mc, wg)
-			log.Printf("name: %s, size: %d\n", file.Name(), file.Size())
+        targetFiles = append(targetFiles, file)
 		}
 	}
-    wg.Wait()
+    // Здесь сортируем targetFiles
+    sort.Slice(targetFiles, func(i, j int) bool { return targetFiles[i].Name() < targetFiles[j].Name() })
+    fmt.Println(targetFiles)
+
+	fileCount := len(targetFiles)
+//    fmt.Println("fileCount: ", fileCount)
+
+	readyChan := make(chan int, fileCount) // канал для обмена значениями между горитнами воркерами и горутиной буффером
+    done := make(chan(int)) // канал для завершения работы горутины - буффера
+	var min int  // указатель на текущее минимальное значение
+	var counter int // количество отработанных горитин из числа fileCount
+	buff := []int{} 
+
+	wg := new(sync.WaitGroup)
+	for idx, file := range targetFiles {
+		wg.Add(1)
+		// go fileProcessor(file.Name(), mc, wg, readyChan, idx, fileCount)
+		go fileProcessor(file.Name(), mc, wg, readyChan, done, idx, fileCount)
+	}
+
+	// Здесь распологаем конкурентный буффер
+	buffer_group := new(sync.WaitGroup)
+    mu := new(sync.Mutex)
+
+	go func(w2 *sync.WaitGroup, ctr int, mu *sync.Mutex) {
+		defer w2.Done()
+		for msg := range readyChan {
+            if msg == min {	
+                fmt.Println("Prefixed current file: ", targetFiles[msg].Name())
+				mu.Lock()
+                min++
+                mu.Unlock()
+			} else {
+                mu.Lock()
+				buff = append(buff, msg)
+                mu.Unlock()
+			}
+			for _, value := range buff {
+				if value == min {
+                    fmt.Println("Prefixed file from buffer while goroutine working: ", targetFiles[value].Name())
+					mu.Lock()
+					min++
+					buff = remove(buff, value)
+                    mu.Unlock()
+				}
+			}
+			mu.Lock()
+			ctr++
+            mu.Unlock()
+            // fmt.Println("counter:", ctr)
+            // fmt.Println(fileCount)
+			if ctr == fileCount {
+				close(done)
+				// done <- ctr
+                // close(done)
+
+			}
+		}
+	}(buffer_group, counter, mu)
+	wg.Wait()
+	buffer_group.Wait()
+
+	for _, value := range buff {
+        fmt.Println("Prefixed buffer after goroutine done", targetFiles[value].Name())
+	}
+
+	// for _, file := range filesFromDir {
+	// 	if !strings.HasPrefix(file.Name(), ".") && strings.HasSuffix(file.Name(), ".tsv.gz") {
+	// 		// Здесь нужно применить сортировку - по имени или по времени
+	// 		wg.Add(1)
+	// 		go fileProcessor(file.Name(), mc, wg)
+	// 		log.Printf("name: %s, size: %d\n", file.Name(), file.Size())
+	// 	}
+	// }
+    // wg.Wait()
 }

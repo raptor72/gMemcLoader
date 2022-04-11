@@ -59,19 +59,10 @@ func buferHandler(head []byte, chank []byte, mc *memcache.Client) []byte {
 	return []byte(smass[strings_in_batch - 1])
 }
 
-func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.WaitGroup, ch chan(int), done chan(int), idx, length int) {
-// func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.WaitGroup, ch chan(int), idx, length int) {
+// func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.WaitGroup, ch chan(int), done chan(int), idx, length int) {
+func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.WaitGroup, ch chan(int), done chan(int), idx int) {
 	defer w.Done()
-
-	// if <-done == length {
-    //     close(done)
-	// }
-
-	// if _, ok := <-done; ok {
-    //     close(done)
-	// }
-
-
+ 
 	nBytes, nChunks := int64(0), int64(0)
     file, err := os.Open(fileName)
     if err != nil {
@@ -114,12 +105,11 @@ func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.Wai
     }
 	ch <- idx
 	log.Println("Prosessed file:", fileName, "Bytes:", nBytes, "Chunks:", nChunks)
-	// if <-done == length {
-    //     close(done)
-	// }
-	// if _, ok := <-done; ok {
-    //     close(done)
-	// }
+	_, ok := <-done 
+    if ok {
+        close(done)
+		// return
+	}
 }
 
 
@@ -147,20 +137,17 @@ func main() {
     sort.Slice(targetFiles, func(i, j int) bool { return targetFiles[i].Name() < targetFiles[j].Name() })
     fmt.Println(targetFiles)
 
-	fileCount := len(targetFiles)
-//    fmt.Println("fileCount: ", fileCount)
-
-	readyChan := make(chan int, fileCount) // канал для обмена значениями между горитнами воркерами и горутиной буффером
+	readyChan := make(chan int, len(targetFiles)) // канал для обмена значениями между горитнами воркерами и горутиной буффером
     done := make(chan(int)) // канал для завершения работы горутины - буффера
 	var min int  // указатель на текущее минимальное значение
 	var counter int // количество отработанных горитин из числа fileCount
 	buff := []int{} 
 
-	wg := new(sync.WaitGroup)
+	caching_group := new(sync.WaitGroup)
 	for idx, file := range targetFiles {
-		wg.Add(1)
+		caching_group.Add(1)
 		// go fileProcessor(file.Name(), mc, wg, readyChan, idx, fileCount)
-		go fileProcessor(file.Name(), mc, wg, readyChan, done, idx, fileCount)
+		go fileProcessor(file.Name(), mc, caching_group, readyChan, done, idx)
 	}
 
 	// Здесь распологаем конкурентный буффер
@@ -194,15 +181,15 @@ func main() {
             mu.Unlock()
             // fmt.Println("counter:", ctr)
             // fmt.Println(fileCount)
-			if ctr == fileCount {
-				close(done)
-				// done <- ctr
-                // close(done)
-
+			if ctr == len(targetFiles) {
+				done <- ctr
+				// close(done)
+				// close(readyChan)
+                // return
 			}
 		}
 	}(buffer_group, counter, mu)
-	wg.Wait()
+	caching_group.Wait()
 	buffer_group.Wait()
 
 	for _, value := range buff {

@@ -2,16 +2,16 @@ package main
 
 import (
 	// "bytes"
-    "flag"
+	"compress/gzip"
+	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
-    "sort"
-	"io/ioutil"
-	"compress/gzip"
+	"sort"
 	"strings"
-    "sync"
+	"sync"
 
 	"github.com/bradfitz/gomemcache/memcache"
 )
@@ -43,6 +43,23 @@ func cacher(buf []byte, mc *memcache.Client) {
 }
 
 
+// func prefix(f *os.File, prefix, where string) {
+func prefix(f os.FileInfo, prefix, where string) {
+	var b strings.Builder
+    b.WriteString(prefix)
+    b.WriteString(f.Name())
+    os.Rename(f.Name(), b.String())
+    switch where {
+	case "current":
+		fmt.Printf("Prefixed current handling file %v\n", f.Name())
+    case "while":
+		fmt.Printf("Prefixed file %v from buffer while goroutine working\n", f.Name())
+	default:
+		fmt.Printf("Prefixed file %v from buffer after goroutine done\n", f.Name())
+	}
+}
+
+
 func buferHandler(head []byte, chank []byte, mc *memcache.Client) []byte {
 	smass := strings.Split(string(chank), "\n")
 	strings_in_batch := len(smass)
@@ -59,7 +76,7 @@ func buferHandler(head []byte, chank []byte, mc *memcache.Client) []byte {
 	return []byte(smass[strings_in_batch - 1])
 }
 
-// func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.WaitGroup, ch chan(int), done chan(int), idx, length int) {
+
 func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.WaitGroup, ch chan(int), done chan(int), idx int) {
 	defer w.Done()
  
@@ -108,7 +125,6 @@ func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.Wai
 	_, ok := <-done 
     if ok {
         close(done)
-		// return
 	}
 }
 
@@ -146,7 +162,6 @@ func main() {
 	caching_group := new(sync.WaitGroup)
 	for idx, file := range targetFiles {
 		caching_group.Add(1)
-		// go fileProcessor(file.Name(), mc, wg, readyChan, idx, fileCount)
 		go fileProcessor(file.Name(), mc, caching_group, readyChan, done, idx)
 	}
 
@@ -158,7 +173,8 @@ func main() {
 		defer w2.Done()
 		for msg := range readyChan {
             if msg == min {	
-                fmt.Println("Prefixed current file: ", targetFiles[msg].Name())
+                // fmt.Println("Prefixed current file: ", targetFiles[msg].Name())
+                prefix(targetFiles[msg], ".", "current")
 				mu.Lock()
                 min++
                 mu.Unlock()
@@ -169,7 +185,8 @@ func main() {
 			}
 			for _, value := range buff {
 				if value == min {
-                    fmt.Println("Prefixed file from buffer while goroutine working: ", targetFiles[value].Name())
+                    // fmt.Println("Prefixed file from buffer while goroutine working: ", targetFiles[value].Name())
+					prefix(targetFiles[value], ".", "while")
 					mu.Lock()
 					min++
 					buff = remove(buff, value)
@@ -179,30 +196,19 @@ func main() {
 			mu.Lock()
 			ctr++
             mu.Unlock()
-            // fmt.Println("counter:", ctr)
-            // fmt.Println(fileCount)
 			if ctr == len(targetFiles) {
 				done <- ctr
-				// close(done)
-				// close(readyChan)
-                // return
 			}
 		}
 	}(buffer_group, counter, mu)
 	caching_group.Wait()
 	buffer_group.Wait()
 
+	// Здесь надо отсортировать буфер
 	for _, value := range buff {
-        fmt.Println("Prefixed buffer after goroutine done", targetFiles[value].Name())
+        // Буфер перед префиксованием тоже надо отсортировать по требуемому способу
+		fmt.Printf("%T\n", targetFiles[value]) // targetFiles[value]
+		prefix(targetFiles[value], ".", "")
 	}
 
-	// for _, file := range filesFromDir {
-	// 	if !strings.HasPrefix(file.Name(), ".") && strings.HasSuffix(file.Name(), ".tsv.gz") {
-	// 		// Здесь нужно применить сортировку - по имени или по времени
-	// 		wg.Add(1)
-	// 		go fileProcessor(file.Name(), mc, wg)
-	// 		log.Printf("name: %s, size: %d\n", file.Name(), file.Size())
-	// 	}
-	// }
-    // wg.Wait()
 }

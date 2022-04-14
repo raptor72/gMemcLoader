@@ -65,11 +65,11 @@ func buferHandler(head []byte, chank []byte, mc *memcache.Client) []byte {
     starter := 0
 	if len(head) != 0 {
 		head = append(head, []byte(smass[0])...)
-        go cacher(head, mc)
+        cacher(head, mc)
         starter ++
 	}
     for starter < strings_in_batch - 1 {
-        go cacher( []byte(smass[starter]), mc)
+        cacher( []byte(smass[starter]), mc)
         starter ++
 	}
 	return []byte(smass[strings_in_batch - 1])
@@ -132,6 +132,7 @@ func main() {
     flushAll := flag.Bool("flushAll", true, "Drop all cached values before the program start")
 	flag.Parse()
 	mc := memcache.New("127.0.0.1:11211")
+    mc.MaxIdleConns = 20
 	if *flushAll {
         mc.FlushAll()
 	}

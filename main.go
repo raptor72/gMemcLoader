@@ -43,7 +43,6 @@ func cacher(buf []byte, mc *memcache.Client) {
 }
 
 
-// func prefix(f *os.File, prefix, where string) {
 func prefix(f os.FileInfo, prefix, where string) {
 	var b strings.Builder
     b.WriteString(prefix)
@@ -67,7 +66,7 @@ func buferHandler(head []byte, chank []byte, mc *memcache.Client) []byte {
 	if len(head) != 0 {
 		head = append(head, []byte(smass[0])...)
         go cacher(head, mc)
-        starter += 1
+        starter ++
 	}
     for starter < strings_in_batch - 1 {
         go cacher( []byte(smass[starter]), mc)

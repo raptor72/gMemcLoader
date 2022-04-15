@@ -31,7 +31,7 @@ func remove(slice []int, s int) []int {
 func cacher(buf []byte, mc *memcache.Client) {
 	s := strings.Split(string(buf), "\n")
 	for _, st := range s {
-		words := strings.Fields(st)
+		words := strings.Fields(st) //[idfa c8eb2c05acb874ac39c658158de09232 72.5964823854 19.0583039058 8636,5030]
 		if len(words) > 1 {
 			key := words[0] + ":" + words[1]
 			value := strings.Join( words[2:], ",")
@@ -59,20 +59,21 @@ func prefix(f os.FileInfo, prefix, where string) {
 }
 
 
-func buferHandler(head []byte, chank []byte, mc *memcache.Client) []byte {
+func buferHandler(head []byte, chank []byte, mc *memcache.Client) ([]byte, int) {
 	smass := strings.Split(string(chank), "\n")
 	strings_in_batch := len(smass)
     starter := 0
 	if len(head) != 0 {
-		head = append(head, []byte(smass[0])...)
-        cacher(head, mc)
+		head = append(head, []byte(smass[0])...) // Здесь слепляем полноценный chank
+        // goodCounter, errCounter := parseBuff([]byte)
+		cacher(head, mc)
         starter ++
 	}
     for starter < strings_in_batch - 1 {
         cacher( []byte(smass[starter]), mc)
         starter ++
 	}
-	return []byte(smass[strings_in_batch - 1])
+	return []byte(smass[strings_in_batch - 1]), starter
 }
 
 
@@ -95,6 +96,7 @@ func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.Wai
 	buf := make([]byte, 0, 8*1024*1024)
 
 	head := []byte{}
+    chCounter, sChanks := 0,0
 
 	for {
         n, err := zipReader.Read(buf[:cap(buf)])
@@ -113,14 +115,15 @@ func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.Wai
         nChunks++
         nBytes += int64(len(buf))
 
-        head = buferHandler(head, buf, memcacheClient)
+        head, sChanks = buferHandler(head, buf, memcacheClient)
+        chCounter += sChanks
 
 		if err != nil && err != io.EOF {
             log.Fatal(err)
         }
     }
 	ch <- idx
-	log.Println("Prosessed file:", fileName, "Bytes:", nBytes, "Chunks:", nChunks)
+	log.Println("Prosessed file:", fileName, "Bytes:", nBytes, "Chunks:", nChunks, "AllValues", chCounter)
 	_, ok := <-done 
     if ok {
         close(done)

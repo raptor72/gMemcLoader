@@ -16,6 +16,16 @@ import (
 	"github.com/bradfitz/gomemcache/memcache"
 )
 
+
+type Tracker struct {
+	Kind string
+    Uuid string
+    Lat float64
+	Long float64
+    Tail []int
+}
+
+
 func remove(slice []int, s int) []int {
     newSlise := []int{}
     for _, value := range slice {

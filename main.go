@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -18,13 +19,47 @@ import (
 
 
 type Tracker struct {
-	Kind string
-    Uuid string
-    Lat float64
-	Long float64
-    Tail []int
+	Key, Uuid, Lat, Lon string
+    Tail []string
 }
 
+
+func parseBuff(buf []byte) (tracks []Tracker, goodCounter, errCounter int) {
+	s := strings.Split(string(buf), "\n")
+	for _, st := range s {
+		words := strings.Fields(st) 
+        if len(words) < 5 {
+			errCounter ++
+            break
+		}
+        strLat := words[2]
+        strLon := words[3]
+
+		lat, err := strconv.ParseFloat(strLat, 64) 
+		if err != nil {
+			errCounter ++
+            break
+		}
+
+		lon, err := strconv.ParseFloat(strLon, 64) 
+		if err != nil {
+			errCounter ++
+            break
+		}	
+
+        for i := range []float64{lat, lon} {
+			if i < -180 || i > 180 {
+				errCounter ++
+				break
+			}
+            break
+		}
+        track := Tracker{words[0], words[1], strLat, strLon, words[4:]}
+        tracks = append(tracks, track)
+        goodCounter ++
+	}
+    return tracks, goodCounter, errCounter
+}
 
 func remove(slice []int, s int) []int {
     newSlise := []int{}
@@ -37,6 +72,22 @@ func remove(slice []int, s int) []int {
 	}
     return newSlise
 }
+
+func cacherNew(tracks []Tracker, mc *memcache.Client) {
+    for _, track := range tracks {
+		var sb strings.Builder
+		sb.WriteString(track.Key)
+		sb.WriteString(":")
+		sb.WriteString(track.Uuid)
+        tail := []string{}
+        tail = append(tail, track.Lat)
+        tail = append(tail, track.Lon)
+        tail = append(tail, track.Tail...)
+		value := strings.Join(tail, ",")
+		mc.Set(&memcache.Item{Key: sb.String(), Value: []byte(value)})
+	}
+}
+
 
 func cacher(buf []byte, mc *memcache.Client) {
 	s := strings.Split(string(buf), "\n")
@@ -69,21 +120,29 @@ func prefix(f os.FileInfo, prefix, where string) {
 }
 
 
-func buferHandler(head []byte, chank []byte, mc *memcache.Client) ([]byte, int) {
+func buferHandler(head []byte, chank []byte, mc *memcache.Client) ([]byte, int, int, int) {
 	smass := strings.Split(string(chank), "\n")
 	strings_in_batch := len(smass)
-    starter := 0
+    // starter := 0
+    var starter, goodValues, Errors int
 	if len(head) != 0 {
 		head = append(head, []byte(smass[0])...) // Здесь слепляем полноценный chank
-        // goodCounter, errCounter := parseBuff([]byte)
-		cacher(head, mc)
+        track, goodCounter, errCounter := parseBuff(head)
+		cacherNew(track, mc)
+		// cacher(head, mc)
         starter ++
+		goodValues += goodCounter
+		Errors += errCounter
 	}
     for starter < strings_in_batch - 1 {
-        cacher( []byte(smass[starter]), mc)
+        track, goodCounter, errCounter := parseBuff([]byte(smass[starter]))
+		cacherNew(track, mc)
+		// cacher( []byte(smass[starter]), mc)
         starter ++
+		goodValues += goodCounter
+		Errors += errCounter
 	}
-	return []byte(smass[strings_in_batch - 1]), starter
+	return []byte(smass[strings_in_batch - 1]), starter, goodValues, Errors
 }
 
 
@@ -106,7 +165,8 @@ func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.Wai
 	buf := make([]byte, 0, 8*1024*1024)
 
 	head := []byte{}
-    chCounter, sChanks := 0,0
+    // chCounter, sChanks := 0,0
+	var chCounter, sChanks, sGoods, sErrs int
 
 	for {
         n, err := zipReader.Read(buf[:cap(buf)])
@@ -125,15 +185,17 @@ func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.Wai
         nChunks++
         nBytes += int64(len(buf))
 
-        head, sChanks = buferHandler(head, buf, memcacheClient)
+        head, sChanks, sGoods, sErrs = buferHandler(head, buf, memcacheClient)
         chCounter += sChanks
+		sGoods ++
+		sErrs ++
 
 		if err != nil && err != io.EOF {
             log.Fatal(err)
         }
     }
 	ch <- idx
-	log.Println("Prosessed file:", fileName, "Bytes:", nBytes, "Chunks:", nChunks, "AllValues", chCounter)
+	log.Println("Prosessed file:", fileName, "Bytes:", nBytes, "Chunks:", nChunks, "AllValues", chCounter, "Good Values:", sGoods, "Err values: ", sErrs)
 	_, ok := <-done 
     if ok {
         close(done)

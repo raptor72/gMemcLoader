@@ -1,7 +1,6 @@
 package main
 
 import (
-	// "bytes"
 	"compress/gzip"
 	"flag"
 	"fmt"
@@ -208,7 +207,6 @@ func main() {
 	}
     // Здесь сортируем targetFiles
     sort.Slice(targetFiles, func(i, j int) bool { return targetFiles[i].Name() < targetFiles[j].Name() })
-    fmt.Println(targetFiles)
 
 	readyChan := make(chan int, len(targetFiles)) // канал для обмена значениями между горитнами воркерами и горутиной буффером
     done := make(chan(int)) // канал для завершения работы горутины - буффера

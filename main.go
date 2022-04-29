@@ -24,7 +24,9 @@ type Tracker struct {
 }
 
 
-func parseBuff(buf []byte) (tracks []Tracker, goodCounter, errCounter int) {
+func parseBuff(buf []byte) ([]Tracker, int, int) {
+	tracks := []Tracker{}
+	goodCounter, errCounter := 0,0
 	s := strings.Split(string(buf), "\n")
 	for _, st := range s {
 		words := strings.Fields(st) 
@@ -50,15 +52,14 @@ func parseBuff(buf []byte) (tracks []Tracker, goodCounter, errCounter int) {
         for i := range []float64{lat, lon} {
 			if i < -180 || i > 180 {
 				errCounter ++
-				break
 			}
-            break
+			break
 		}
         track := Tracker{words[0], words[1], strLat, strLon, words[4:]}
         tracks = append(tracks, track)
         goodCounter ++
 	}
-    return tracks, goodCounter, errCounter
+	return tracks, goodCounter, errCounter
 }
 
 func remove(slice []int, s int) []int {
@@ -165,8 +166,7 @@ func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.Wai
 	buf := make([]byte, 0, 8*1024*1024)
 
 	head := []byte{}
-    // chCounter, sChanks := 0,0
-	var chCounter, sChanks, sGoods, sErrs int
+	var numAll, numGood, numErr int
 
 	for {
         n, err := zipReader.Read(buf[:cap(buf)])
@@ -185,17 +185,18 @@ func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.Wai
         nChunks++
         nBytes += int64(len(buf))
 
-        head, sChanks, sGoods, sErrs = buferHandler(head, buf, memcacheClient)
-        chCounter += sChanks
-		sGoods ++
-		sErrs ++
+        curHead, curAll, curGood, curErr := buferHandler(head, buf, memcacheClient)
+        head = curHead
+		numAll += curAll
+		numGood += curGood
+		numErr += curErr
 
 		if err != nil && err != io.EOF {
             log.Fatal(err)
         }
     }
 	ch <- idx
-	log.Println("Prosessed file:", fileName, "Bytes:", nBytes, "Chunks:", nChunks, "AllValues", chCounter, "Good Values:", sGoods, "Err values: ", sErrs)
+	log.Println("Prosessed file:", fileName, "Bytes:", nBytes, "Chunks:", nChunks, "AllValues:", numAll, "Good Values:", numGood, "Err values:", numErr)
 	_, ok := <-done 
     if ok {
         close(done)

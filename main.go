@@ -49,13 +49,12 @@ func parseBuff(buf []byte) ([]Tracker, int, int) {
             break
 		}	
 
-        for i := range []float64{lat, lon} {
-			if i < -180 || i > 180 {
-				errCounter ++
-			}
+		if (lat < -180 || lat > 180) || (lon < -180 || lon > 180) {
+			errCounter ++
 			break
 		}
-        track := Tracker{words[0], words[1], strLat, strLon, words[4:]}
+
+		track := Tracker{words[0], words[1], strLat, strLon, words[4:]}
         tracks = append(tracks, track)
         goodCounter ++
 	}

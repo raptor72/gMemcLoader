@@ -73,7 +73,7 @@ func remove(slice []int, s int) []int {
     return newSlise
 }
 
-func cacherNew(tracks []Tracker, mc *memcache.Client) {
+func cacher(tracks []Tracker, mc *memcache.Client) {
     for _, track := range tracks {
 		var sb strings.Builder
 		sb.WriteString(track.Key)
@@ -85,21 +85,6 @@ func cacherNew(tracks []Tracker, mc *memcache.Client) {
         tail = append(tail, track.Tail...)
 		value := strings.Join(tail, ",")
 		mc.Set(&memcache.Item{Key: sb.String(), Value: []byte(value)})
-	}
-}
-
-
-func cacher(buf []byte, mc *memcache.Client) {
-	s := strings.Split(string(buf), "\n")
-	for _, st := range s {
-		words := strings.Fields(st) //[idfa c8eb2c05acb874ac39c658158de09232 72.5964823854 19.0583039058 8636,5030]
-		if len(words) > 1 {
-			key := words[0] + ":" + words[1]
-			value := strings.Join( words[2:], ",")
-			// fmt.Println(key)
-			// fmt.Println(value)
-			mc.Set(&memcache.Item{Key: key, Value: []byte(value)})
-		}
 	}
 }
 
@@ -123,21 +108,18 @@ func prefix(f os.FileInfo, prefix, where string) {
 func buferHandler(head []byte, chank []byte, mc *memcache.Client) ([]byte, int, int, int) {
 	smass := strings.Split(string(chank), "\n")
 	strings_in_batch := len(smass)
-    // starter := 0
     var starter, goodValues, Errors int
 	if len(head) != 0 {
 		head = append(head, []byte(smass[0])...) // Здесь слепляем полноценный chank
         track, goodCounter, errCounter := parseBuff(head)
-		cacherNew(track, mc)
-		// cacher(head, mc)
+		cacher(track, mc)
         starter ++
 		goodValues += goodCounter
 		Errors += errCounter
 	}
     for starter < strings_in_batch - 1 {
         track, goodCounter, errCounter := parseBuff([]byte(smass[starter]))
-		cacherNew(track, mc)
-		// cacher( []byte(smass[starter]), mc)
+		cacher(track, mc)
         starter ++
 		goodValues += goodCounter
 		Errors += errCounter
@@ -248,7 +230,6 @@ func main() {
 		defer w2.Done()
 		for msg := range readyChan {
             if msg == min {	
-                // fmt.Println("Prefixed current file: ", targetFiles[msg].Name())
                 prefix(targetFiles[msg], ".", "current")
 				mu.Lock()
                 min++
@@ -260,7 +241,6 @@ func main() {
 			}
 			for _, value := range buff {
 				if value == min {
-                    // fmt.Println("Prefixed file from buffer while goroutine working: ", targetFiles[value].Name())
 					prefix(targetFiles[value], ".", "while")
 					mu.Lock()
 					min++

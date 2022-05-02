@@ -72,8 +72,9 @@ func remove(slice []int, s int) []int {
     return newSlise
 }
 
-func cacher(tracks []Tracker, mc *memcache.Client) {
-    for _, track := range tracks {
+// func cacher(tracks []Tracker, mc *memcache.Client) {
+func cacher(tracks []Tracker, mGrid map[string]*memcache.Client) {
+	for _, track := range tracks {
 		var sb strings.Builder
 		sb.WriteString(track.Key)
 		sb.WriteString(":")
@@ -83,7 +84,8 @@ func cacher(tracks []Tracker, mc *memcache.Client) {
         tail = append(tail, track.Lon)
         tail = append(tail, track.Tail...)
 		value := strings.Join(tail, ",")
-		mc.Set(&memcache.Item{Key: sb.String(), Value: []byte(value)})
+        mGrid[track.Key].Set(&memcache.Item{Key: sb.String(), Value: []byte(value)})
+		// mc.Set(&memcache.Item{Key: sb.String(), Value: []byte(value)})
 	}
 }
 
@@ -104,7 +106,8 @@ func prefix(f os.FileInfo, prefix, where string) {
 }
 
 
-func buferHandler(head []byte, chank []byte, mc *memcache.Client) ([]byte, int, int, int) {
+// func buferHandler(head []byte, chank []byte, mc *memcache.Client) ([]byte, int, int, int) {
+func buferHandler(head []byte, chank []byte, mc	map[string]*memcache.Client) ([]byte, int, int, int) {
 	smass := strings.Split(string(chank), "\n")
 	strings_in_batch := len(smass)
     var starter, goodValues, Errors int
@@ -127,7 +130,8 @@ func buferHandler(head []byte, chank []byte, mc *memcache.Client) ([]byte, int, 
 }
 
 
-func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.WaitGroup, ch chan(int), done chan(int), idx int) {
+// func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.WaitGroup, ch chan(int), done chan(int), idx int) {
+func fileProcessor(fileName string, memcacheClient map[string]*memcache.Client, w *sync.WaitGroup, ch chan(int), done chan(int), idx int) {
 	defer w.Done()
  
 	nBytes, nChunks := int64(0), int64(0)
@@ -185,32 +189,34 @@ func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.Wai
 
 
 func main() {
-    flushAll := flag.Bool("flushAll", true, "Drop all cached values before the program start")
-    Adid := flag.Int("adid", 11212, "port for adid klient device")
-    Dvid := flag.Int("dviv", 11212, "port for dvid klisnt device")
-    Gaid := flag.Int("gaid", 11213, "port for gaid client device")
-    Idfa := flag.Int("idfa", 11213, "port for idfa client device")
+    // flushAll := flag.Bool("flushAll", true, "Drop all cached values before the program start")
+    Adid := flag.String("adid", "11212", "port for adid klient device")
+    Dvid := flag.String("dviv", "11212", "port for dvid klisnt device")
+    Gaid := flag.String("gaid", "11213", "port for gaid client device")
+    Idfa := flag.String("idfa", "11213", "port for idfa client device")
 	flag.Parse()        
-	mc := memcache.New("127.0.0.1:11211")
-    mc.MaxIdleConns = 20
-    fmt.Printf("mc type is: %T\n", mc) // *memcache.Client
+	// mc := memcache.New("127.0.0.1:11211")
+    // mc.MaxIdleConns = 20
+    // fmt.Printf("mc type is: %T\n", mc) // *memcache.Client
     // mGrig := make(map[int]*memcache.Client)
-    mGrig := map[int]*memcache.Client{
-        *Adid : memcache.New("127.0.0.1" + string(*Adid)),
-        *Dvid : memcache.New("127.0.0.1" + string(*Dvid)),
-        *Gaid : memcache.New("127.0.0.1" + string(*Gaid)),
-		*Idfa : memcache.New("127.0.0.1" + string(*Idfa)),
+    mGrid := map[string]*memcache.Client{
+        "adid" : memcache.New("127.0.0.1" + *Adid),
+        "dvid" : memcache.New("127.0.0.1" + *Dvid),
+        "gaid" : memcache.New("127.0.0.1" + *Gaid),
+		"idfa" : memcache.New("127.0.0.1" + *Idfa),
 	}
-    fmt.Println(mGrig)    
-	if *flushAll {
-        mc.FlushAll()
+    for _, value := range mGrid {
+        value.MaxIdleConns = 20
 	}
+	// fmt.Println(mGrid)    
+	// if *flushAll {
+        // mc.FlushAll()
+	// }
 
 	filesFromDir, err := ioutil.ReadDir(".")
 	if err != nil {
 		log.Fatal(err)
 	}
-
 
     var targetFiles []os.FileInfo
 	for _, file := range filesFromDir {
@@ -230,7 +236,7 @@ func main() {
 	caching_group := new(sync.WaitGroup)
 	for idx, file := range targetFiles {
 		caching_group.Add(1)
-		go fileProcessor(file.Name(), mc, caching_group, readyChan, done, idx)
+		go fileProcessor(file.Name(), mGrid, caching_group, readyChan, done, idx)
 	}
 
 	// Здесь распологаем конкурентный буффер

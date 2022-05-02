@@ -186,9 +186,22 @@ func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.Wai
 
 func main() {
     flushAll := flag.Bool("flushAll", true, "Drop all cached values before the program start")
-	flag.Parse()
+    Adid := flag.Int("adid", 11212, "port for adid klient device")
+    Dvid := flag.Int("dviv", 11212, "port for dvid klisnt device")
+    Gaid := flag.Int("gaid", 11213, "port for gaid client device")
+    Idfa := flag.Int("idfa", 11213, "port for idfa client device")
+	flag.Parse()        
 	mc := memcache.New("127.0.0.1:11211")
     mc.MaxIdleConns = 20
+    fmt.Printf("mc type is: %T\n", mc) // *memcache.Client
+    // mGrig := make(map[int]*memcache.Client)
+    mGrig := map[int]*memcache.Client{
+        *Adid : memcache.New("127.0.0.1" + string(*Adid)),
+        *Dvid : memcache.New("127.0.0.1" + string(*Dvid)),
+        *Gaid : memcache.New("127.0.0.1" + string(*Gaid)),
+		*Idfa : memcache.New("127.0.0.1" + string(*Idfa)),
+	}
+    fmt.Println(mGrig)    
 	if *flushAll {
         mc.FlushAll()
 	}

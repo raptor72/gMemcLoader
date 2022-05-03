@@ -199,15 +199,41 @@ func main() {
     // mc.MaxIdleConns = 20
     // fmt.Printf("mc type is: %T\n", mc) // *memcache.Client
     // mGrig := make(map[int]*memcache.Client)
-    mGrid := map[string]*memcache.Client{
+	// mGrid := make(map[string]*memcache.Client)
+	ss := new(memcache.ServerList)
+
+    fmt.Printf("%T\n", Adid)
+
+    for _, port := range []string{*Adid, *Dvid, *Gaid, *Idfa} {
+		err := ss.SetServers("127.0.0.1:" + port)
+        if err != nil {
+            panic(err)
+        }
+        c := memcache.NewFromSelector(ss)
+
+		err = c.Ping()
+		if err != nil {
+			panic(err)
+		}
+        fmt.Printf("type of c is: %T\n", c)
+        // mGrid["adid"] = c
+	}
+
+	mGrid := map[string]*memcache.Client{
         "adid" : memcache.New("127.0.0.1" + *Adid),
         "dvid" : memcache.New("127.0.0.1" + *Dvid),
         "gaid" : memcache.New("127.0.0.1" + *Gaid),
 		"idfa" : memcache.New("127.0.0.1" + *Idfa),
 	}
     for _, value := range mGrid {
-        value.MaxIdleConns = 20
+        err := value.Ping()
+        if err != nil {
+			log.Fatal("client not foyund")
+		}
+		value.MaxIdleConns = 20
 	}
+
+
 	// fmt.Println(mGrid)    
 	// if *flushAll {
         // mc.FlushAll()

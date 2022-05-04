@@ -60,6 +60,7 @@ func parseBuff(buf []byte) ([]Tracker, int, int) {
 	return tracks, goodCounter, errCounter
 }
 
+
 func remove(slice []int, s int) []int {
     newSlise := []int{}
     for _, value := range slice {
@@ -72,7 +73,7 @@ func remove(slice []int, s int) []int {
     return newSlise
 }
 
-// func cacher(tracks []Tracker, mc *memcache.Client) {
+
 func cacher(tracks []Tracker, mGrid map[string]*memcache.Client) {
 	for _, track := range tracks {
 		var sb strings.Builder
@@ -85,7 +86,6 @@ func cacher(tracks []Tracker, mGrid map[string]*memcache.Client) {
         tail = append(tail, track.Tail...)
 		value := strings.Join(tail, ",")
         mGrid[track.Key].Set(&memcache.Item{Key: sb.String(), Value: []byte(value)})
-		// mc.Set(&memcache.Item{Key: sb.String(), Value: []byte(value)})
 	}
 }
 
@@ -106,22 +106,21 @@ func prefix(f os.FileInfo, prefix, where string) {
 }
 
 
-// func buferHandler(head []byte, chank []byte, mc *memcache.Client) ([]byte, int, int, int) {
-func buferHandler(head []byte, chank []byte, mc	map[string]*memcache.Client) ([]byte, int, int, int) {
+func buferHandler(head []byte, chank []byte, mGrid	map[string]*memcache.Client) ([]byte, int, int, int) {
 	smass := strings.Split(string(chank), "\n")
 	strings_in_batch := len(smass)
     var starter, goodValues, Errors int
 	if len(head) != 0 {
 		head = append(head, []byte(smass[0])...) // Здесь слепляем полноценный chank
         track, goodCounter, errCounter := parseBuff(head)
-		cacher(track, mc)
+		cacher(track, mGrid)
         starter ++
 		goodValues += goodCounter
 		Errors += errCounter
 	}
     for starter < strings_in_batch - 1 {
         track, goodCounter, errCounter := parseBuff([]byte(smass[starter]))
-		cacher(track, mc)
+		cacher(track, mGrid)
         starter ++
 		goodValues += goodCounter
 		Errors += errCounter
@@ -130,8 +129,7 @@ func buferHandler(head []byte, chank []byte, mc	map[string]*memcache.Client) ([]
 }
 
 
-// func fileProcessor(fileName string, memcacheClient *memcache.Client, w *sync.WaitGroup, ch chan(int), done chan(int), idx int) {
-func fileProcessor(fileName string, memcacheClient map[string]*memcache.Client, w *sync.WaitGroup, ch chan(int), done chan(int), idx int) {
+func fileProcessor(fileName string, mGrid map[string]*memcache.Client, w *sync.WaitGroup, ch, done chan(int), idx int) {
 	defer w.Done()
  
 	nBytes, nChunks := int64(0), int64(0)
@@ -169,7 +167,7 @@ func fileProcessor(fileName string, memcacheClient map[string]*memcache.Client, 
         nChunks++
         nBytes += int64(len(buf))
 
-        curHead, curAll, curGood, curErr := buferHandler(head, buf, memcacheClient)
+        curHead, curAll, curGood, curErr := buferHandler(head, buf, mGrid)
         head = curHead
 		numAll += curAll
 		numGood += curGood
@@ -180,7 +178,8 @@ func fileProcessor(fileName string, memcacheClient map[string]*memcache.Client, 
         }
     }
 	ch <- idx
-	log.Println("Prosessed file:", fileName, "Bytes:", nBytes, "Chunks:", nChunks, "AllValues:", numAll, "Good Values:", numGood, "Err values:", numErr)
+	log.Println("Prosessed file:", fileName, "Bytes:", nBytes, "Chunks:", nChunks, 
+	            "AllValues:", numAll, "Good Values:", numGood, "Err values:", numErr)
 	_, ok := <-done 
     if ok {
         close(done)
@@ -190,41 +189,31 @@ func fileProcessor(fileName string, memcacheClient map[string]*memcache.Client, 
 
 func main() {
     // flushAll := flag.Bool("flushAll", true, "Drop all cached values before the program start")
-    Adid := flag.String("adid", "11212", "port for adid klient device")
-    Dvid := flag.String("dviv", "11212", "port for dvid klisnt device")
-    Gaid := flag.String("gaid", "11213", "port for gaid client device")
-    Idfa := flag.String("idfa", "11213", "port for idfa client device")
+    Adid := flag.String("adid", "11211", "port for storing info about adid klient device")
+    Dvid := flag.String("dviv", "11211", "port for storing info about dvid klisnt device")
+    Gaid := flag.String("gaid", "11211", "port for storing info about gaid client device")
+    Idfa := flag.String("idfa", "11211", "port for storing info about idfa client device")
 	flag.Parse()        
-	// mc := memcache.New("127.0.0.1:11211")
-    // mc.MaxIdleConns = 20
-    // fmt.Printf("mc type is: %T\n", mc) // *memcache.Client
-    // mGrig := make(map[int]*memcache.Client)
-	// mGrid := make(map[string]*memcache.Client)
+	mGrid := make(map[string]*memcache.Client)
 	ss := new(memcache.ServerList)
-
-    fmt.Printf("%T\n", Adid)
-
-    for _, port := range []string{*Adid, *Dvid, *Gaid, *Idfa} {
-		err := ss.SetServers("127.0.0.1:" + port)
+    for _, name_and_port := range [][]string{ 
+		[]string{"adid", *Adid}, 
+		[]string{"dvid", *Dvid}, 
+		[]string{"gaid", *Gaid}, 
+		[]string{"idfa", *Idfa}}{
+		err := ss.SetServers("127.0.0.1:" + name_and_port[1])
         if err != nil {
-            panic(err)
-        }
-        c := memcache.NewFromSelector(ss)
+            log.Fatalf("Coud not set memcache server on address 127.0.0.1 and port %v", name_and_port[1])
+		}
+        c := memcache.NewFromSelector(ss) // type of c is: *memcache.Client
 
 		err = c.Ping()
 		if err != nil {
-			panic(err)
+            log.Fatalf("Coud not connect to memcache instance on 127.0.0.1 and port %v", name_and_port[1])
 		}
-        fmt.Printf("type of c is: %T\n", c)
-        // mGrid["adid"] = c
+        mGrid[name_and_port[0]] = c
 	}
 
-	mGrid := map[string]*memcache.Client{
-        "adid" : memcache.New("127.0.0.1" + *Adid),
-        "dvid" : memcache.New("127.0.0.1" + *Dvid),
-        "gaid" : memcache.New("127.0.0.1" + *Gaid),
-		"idfa" : memcache.New("127.0.0.1" + *Idfa),
-	}
     for _, value := range mGrid {
         err := value.Ping()
         if err != nil {
@@ -232,7 +221,6 @@ func main() {
 		}
 		value.MaxIdleConns = 20
 	}
-
 
 	// fmt.Println(mGrid)    
 	// if *flushAll {

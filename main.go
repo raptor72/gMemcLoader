@@ -173,6 +173,10 @@ func fileProcessor(fileName string, mGrid map[string]*memcache.Client, w *sync.W
 		numGood += curGood
 		numErr += curErr
 
+		if nChunks % 8000 == 0 {
+			log.Printf("%v Chunks and %v values done for file %v\n", nChunks, numAll, fileName)
+		}
+
 		if err != nil && err != io.EOF {
             log.Fatal(err)
         }
@@ -188,8 +192,9 @@ func fileProcessor(fileName string, mGrid map[string]*memcache.Client, w *sync.W
 
 
 func main() {
-    // flushAll := flag.Bool("flushAll", true, "Drop all cached values before the program start")
-    Adid := flag.String("adid", "11211", "port for storing info about adid klient device")
+    flushAll := flag.Bool("flushAll", true, "Drop all cached values before the program start")
+    maxConns := flag.Int("maxConns", 15, "Number of max idle connections for each client instance")
+	Adid := flag.String("adid", "11211", "port for storing info about adid klient device")
     Dvid := flag.String("dviv", "11211", "port for storing info about dvid klisnt device")
     Gaid := flag.String("gaid", "11211", "port for storing info about gaid client device")
     Idfa := flag.String("idfa", "11211", "port for storing info about idfa client device")
@@ -211,21 +216,14 @@ func main() {
 		if err != nil {
             log.Fatalf("Coud not connect to memcache instance on 127.0.0.1 and port %v", name_and_port[1])
 		}
-        mGrid[name_and_port[0]] = c
-	}
 
-    for _, value := range mGrid {
-        err := value.Ping()
-        if err != nil {
-			log.Fatal("client not foyund")
-		}
-		value.MaxIdleConns = 20
-	}
+		c.MaxIdleConns = *maxConns
+	    if *flushAll {
+            c.FlushAll()
+    	}
 
-	// fmt.Println(mGrid)    
-	// if *flushAll {
-        // mc.FlushAll()
-	// }
+		mGrid[name_and_port[0]] = c
+	}
 
 	filesFromDir, err := ioutil.ReadDir(".")
 	if err != nil {
@@ -240,6 +238,11 @@ func main() {
 	}
     // Здесь сортируем targetFiles
     sort.Slice(targetFiles, func(i, j int) bool { return targetFiles[i].Name() < targetFiles[j].Name() })
+    log.Println("Start caching files: ")
+	for _, file := range targetFiles {
+		fmt.Printf("%v ", file.Name())
+	}
+    fmt.Println()
 
 	readyChan := make(chan int, len(targetFiles)) // канал для обмена значениями между горитнами воркерами и горутиной буффером
     done := make(chan(int)) // канал для завершения работы горутины - буффера
@@ -290,11 +293,9 @@ func main() {
 	caching_group.Wait()
 	buffer_group.Wait()
 
-	// Здесь надо отсортировать буфер
+    sort.Ints(buff)
 	for _, value := range buff {
-        // Буфер перед префиксованием тоже надо отсортировать по требуемому способу
-		fmt.Printf("%T\n", targetFiles[value]) // targetFiles[value]
-		prefix(targetFiles[value], ".", "")
+		prefix(targetFiles[value], ".", "") // %T of targetFiles[value] is *os.fileStat
 	}
 
 }

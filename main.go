@@ -194,18 +194,18 @@ func fileProcessor(fileName string, mGrid map[string]*memcache.Client, w *sync.W
 func main() {
     flushAll := flag.Bool("flushAll", true, "Drop all cached values before the program start")
     maxConns := flag.Int("maxConns", 15, "Number of max idle connections for each client instance")
-	Adid := flag.String("adid", "11211", "port for storing info about adid klient device")
-    Dvid := flag.String("dviv", "11211", "port for storing info about dvid klisnt device")
-    Gaid := flag.String("gaid", "11211", "port for storing info about gaid client device")
-    Idfa := flag.String("idfa", "11211", "port for storing info about idfa client device")
-	flag.Parse()        
+	adid := flag.String("adid", "11211", "port for storing info about adid klient device")
+    dvid := flag.String("dviv", "11211", "port for storing info about dvid klisnt device")
+    gaid := flag.String("gaid", "11211", "port for storing info about gaid client device")
+    idfa := flag.String("idfa", "11211", "port for storing info about idfa client device")
+	flag.Parse()
 	mGrid := make(map[string]*memcache.Client)
 	ss := new(memcache.ServerList)
     for _, name_and_port := range [][]string{ 
-		[]string{"adid", *Adid}, 
-		[]string{"dvid", *Dvid}, 
-		[]string{"gaid", *Gaid}, 
-		[]string{"idfa", *Idfa}}{
+		[]string{"adid", *adid},
+		[]string{"dvid", *dvid},
+		[]string{"gaid", *gaid},
+		[]string{"idfa", *idfa}}{
 		err := ss.SetServers("127.0.0.1:" + name_and_port[1])
         if err != nil {
             log.Fatalf("Coud not set memcache server on address 127.0.0.1 and port %v", name_and_port[1])
@@ -250,14 +250,14 @@ func main() {
 	var counter int // количество отработанных горитин из числа fileCount
 	buff := []int{} 
 
-	caching_group := new(sync.WaitGroup)
+	cachingGroup := new(sync.WaitGroup)
 	for idx, file := range targetFiles {
-		caching_group.Add(1)
-		go fileProcessor(file.Name(), mGrid, caching_group, readyChan, done, idx)
+		cachingGroup.Add(1)
+		go fileProcessor(file.Name(), mGrid, cachingGroup, readyChan, done, idx)
 	}
 
 	// Здесь распологаем конкурентный буффер
-	buffer_group := new(sync.WaitGroup)
+	bufferGroup := new(sync.WaitGroup)
     mu := new(sync.Mutex)
 
 	go func(w2 *sync.WaitGroup, ctr int, mu *sync.Mutex) {
@@ -289,13 +289,13 @@ func main() {
 				done <- ctr
 			}
 		}
-	}(buffer_group, counter, mu)
-	caching_group.Wait()
-	buffer_group.Wait()
+	}(bufferGroup, counter, mu)
+	cachingGroup.Wait()
+	bufferGroup.Wait()
 
     sort.Ints(buff)
-	for _, value := range buff {
-		prefix(targetFiles[value], ".", "") // %T of targetFiles[value] is *os.fileStat
+	for _, file_index := range buff {
+		prefix(targetFiles[file_index], ".", "") // %T of targetFiles[value] is *os.fileStat
 	}
 
 }

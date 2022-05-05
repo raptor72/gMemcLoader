@@ -194,6 +194,7 @@ func fileProcessor(fileName string, mGrid map[string]*memcache.Client, w *sync.W
 func main() {
     flushAll := flag.Bool("flushAll", true, "Drop all cached values before the program start")
     maxConns := flag.Int("maxConns", 15, "Number of max idle connections for each client instance")
+    dir := flag.String("dir", ".", "the directory where the files are located")
 	adid := flag.String("adid", "11211", "port for storing info about adid klient device")
     dvid := flag.String("dviv", "11211", "port for storing info about dvid klisnt device")
     gaid := flag.String("gaid", "11211", "port for storing info about gaid client device")
@@ -202,10 +203,10 @@ func main() {
 	mGrid := make(map[string]*memcache.Client)
 	ss := new(memcache.ServerList)
     for _, name_and_port := range [][]string{ 
-		[]string{"adid", *adid},
-		[]string{"dvid", *dvid},
-		[]string{"gaid", *gaid},
-		[]string{"idfa", *idfa}}{
+		{"adid", *adid},
+		{"dvid", *dvid},
+		{"gaid", *gaid},
+		{"idfa", *idfa}}{
 		err := ss.SetServers("127.0.0.1:" + name_and_port[1])
         if err != nil {
             log.Fatalf("Coud not set memcache server on address 127.0.0.1 and port %v", name_and_port[1])
@@ -225,7 +226,7 @@ func main() {
 		mGrid[name_and_port[0]] = c
 	}
 
-	filesFromDir, err := ioutil.ReadDir(".")
+	filesFromDir, err := ioutil.ReadDir(*dir)
 	if err != nil {
 		log.Fatal(err)
 	}
